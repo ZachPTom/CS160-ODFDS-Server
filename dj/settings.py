@@ -89,11 +89,11 @@ WSGI_APPLICATION = 'dj.wsgi.application'
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.mysql',
-        'NAME': 'ODFDSdb',
-        'USER': 'root',
-        'PASSWORD': 'mysqlpass',
-        'HOST': '',
-        'PORT': '',
+        'NAME': 'ODFDS',
+        'USER': 'cs160odfds',
+        'PASSWORD': 'cs160project',
+        'HOST': 'odfds-db.cu8zebazp3wo.us-east-2.rds.amazonaws.com',
+        'PORT': '3306',
     }
 }
 
