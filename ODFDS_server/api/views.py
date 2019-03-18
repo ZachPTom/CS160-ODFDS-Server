@@ -24,9 +24,11 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     parser_classes = (JSONParser,)
 
     @detail_route(methods=['post'], url_path='login')
-    def login(self, request, pk=None):
+    def login(self, request, pk="r"):
         email = request.data['email']
-        test = RestaurantViewSet.queryset.filter(email=email)
-        return Response(str(test))
+        password = request.data['password']
+        test = RestaurantViewSet.queryset.filter(email=email,
+                                                 password=password)
+        return Response(list(test.values())[0])
 
 
