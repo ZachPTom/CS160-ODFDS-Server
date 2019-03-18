@@ -21,3 +21,9 @@
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
+
+#mine
+.idea
+__pycache__
+CS160-ODFDS-Client/
+CS160-ODFDS-Server/
