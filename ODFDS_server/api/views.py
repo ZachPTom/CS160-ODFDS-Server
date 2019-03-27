@@ -17,8 +17,8 @@ from math import sqrt
 def session_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        test = args[1].session.get('id', None)
-        if not test:
+        session = args[1].session.get('id', None)
+        if not session:
             return HttpResponse('Not logged in', status=401)
         return f(*args, **kwargs)
     return wrapper
@@ -95,8 +95,6 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         return Response(test, status=200)
 
 
-
-
 # Create your views here.
 class DriverViewSet(viewsets.ModelViewSet):
     queryset = Driver.objects.all()
@@ -139,13 +137,12 @@ class DriverViewSet(viewsets.ModelViewSet):
     @detail_route(methods=['post'], url_path='acceptation')
     @session_required
     def acceptation(self, request, pk='r'):
-        order_id = request.data['order id']
+        order_id = request.data['order_id']
         div_id = request.session['id']
         Driver.objects.get(id=div_id).occupied = True
-        Order.objects.get(id=order_id).status = "S2"
+        Order.objects.filter(id=order_id).update(status="S2")
         rest_id = Order.objects.get(id=order_id).restaurant_id
-        orders = get_list_or_404(Order.objects, restaurant_id=rest_id,
-                                 status='S1')
+        orders = Order.objects.filter(restaurant_id=rest_id, status='S1')
         orders_accepted = []
         for order in orders:
             orders_accepted.append(order.getter())
@@ -156,7 +153,7 @@ class DriverViewSet(viewsets.ModelViewSet):
     @detail_route(methods=['post'], url_path='confirmation')
     @session_required
     def confirmation(self, request, pk='r'):
-        orders_id = request.data['order id']
+        orders_id = request.data['order_id']
         customer_address = []
         div_id = request.session['id']
         rest_id = Order.objects.get(id=orders_id[0]).restaurant_id
@@ -178,7 +175,7 @@ class DriverViewSet(viewsets.ModelViewSet):
     @detail_route(methods=['post'], url_path='delivered')
     @session_required
     def delivered(self, request, pk='r'):
-        order_id = request.data['order id']
+        order_id = request.data['order_id']
         order = Order.objects.get(id=order_id)
         order.status = "S4"
         div_id = request.session['id']
