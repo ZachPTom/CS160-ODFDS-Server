@@ -39,7 +39,7 @@ Satus: 200 SUCCESS
 
 Return: a JSON contains restaurant info.
 
-## *Driver Logout*
+## *Restaurant Logout*
 #### http://127.0.0.1:8000/api/restaurant/r/logout/ (DELETE)
 
 #### Responses:
