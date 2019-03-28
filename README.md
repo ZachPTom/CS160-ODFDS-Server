@@ -88,8 +88,6 @@ Return: a list of JSON contains orders of the restaurant
 
 	{
 		"email": "<string>",
-		"ssn": null,
-		"date_of_birth": null,
 		"first_name": "<string>",
 		"last_name": "<sting>",
 		"driver_lat": "<float>",
