@@ -20,7 +20,7 @@ On-Demand Food Delivery Service: server side
 		"password": "<string>",
 		"restaurant_name": "<string>",
 		"rest_lat": "<float>",
-        "rest_long": "<float>"
+        	"rest_long": "<float>"
 	}
 
 #### Responses:
