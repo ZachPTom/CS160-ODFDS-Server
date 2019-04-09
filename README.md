@@ -131,7 +131,7 @@ Status: 200 SUCCESS
 
 Return: a JSON contains a chosen order 
 
-## *Driver's acceptation*
+## DO NOT USE *Driver's acceptation* DO NOT USE
 #### http://127.0.0.1:8000/api/driver/r/login/ (POST)
 ##### Request Body:
 	{
