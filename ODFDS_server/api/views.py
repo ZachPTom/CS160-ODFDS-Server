@@ -1,24 +1,79 @@
-from django.http import HttpResponse
-from api.models import Driver, Restaurant, Order
+from api.models import Driver, Restaurant, Order, Token
 from api.serializers import DriverSerializer, RestaurantSerializer
 from rest_framework import viewsets
-from django import forms
-from django.http import HttpResponse, HttpResponseRedirect
-from django.template import RequestContext
-from django.shortcuts import render,render_to_response
+from django.http import HttpResponse
 from rest_framework.parsers import JSONParser
 from rest_framework.decorators import detail_route
 from rest_framework.response import Response
 from django.shortcuts import get_list_or_404
 from functools import wraps
-from math import sqrt
+import googlemaps
+import secrets
 
 
-def session_required(f):
+def duration(origin, destination):
+    gmaps = googlemaps.Client(key='AIzaSyDBmKH8_o35KRFWmcke2WO8xddSSvzT_-8')
+    directions_result = gmaps.distance_matrix(origin, destination,
+                                              mode='driving')
+    if type(destination) is list:
+        return int(directions_result['rows'][0]['elements'][0]['duration']
+                ['value']) + int(directions_result['rows'][0]['elements'][1]
+                ['duration']['value'])
+    return int(directions_result['rows'][0]['elements'][0]['duration'][
+                    'value'])
+
+
+def order_sort(location):
+    first_order_first = duration({'lat': location['rest'][0],
+                                  'lng': location['rest'][1]},
+                                 [{'lat': location['first'][0],
+                                   'lng':location['first'][1]},
+                                  {'lat': location['second'][0],
+                                   'lng': location['second'][1]}])
+
+    second_order_first = duration({'lat': location['rest'][0],
+                                  'lng': location['rest'][1]},
+                                 [{'lat': location['second'][0],
+                                   'lng':location['second'][1]},
+                                  {'lat': location['first'][0],
+                                   'lng': location['first'][1]}])
+    if first_order_first <= second_order_first:
+        return location
+    else:
+        location['first'], location['second'] = location['second'], location[
+            'first']
+        return location
+
+
+def fee_computation(rest_id, destination):
+    rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
+    rest_long = Restaurant.objects.get(id=rest_id).rest_long
+    rest_location = {'lat': rest_lat, 'lng': rest_long}
+    gmaps = googlemaps.Client(key='AIzaSyDBmKH8_o35KRFWmcke2WO8xddSSvzT_-8')
+    directions_result = gmaps.distance_matrix(rest_location, destination,
+                                              units='imperial', mode='driving')
+    miles = float(directions_result['rows'][0]['elements'][0]['distance']
+                  ['text'][:-3])
+    return driver_fee(miles)
+
+
+# def session_required(f):
+#     @wraps(f)
+#     def wrapper(*args, **kwargs):
+#         session = args[1].session.get('id', None)
+#         if not session:
+#             return HttpResponse('Not logged in', status=401)
+#         return f(*args, **kwargs)
+#     return wrapper
+
+def token_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        session = args[1].session.get('id', None)
-        if not session:
+        print(args[1].data.get('key', None))
+        num_result = Token.objects.filter(keys=args[1].data.get('key',
+                                                                None)).count()
+        print(num_result)
+        if not num_result:
             return HttpResponse('Not logged in', status=401)
         return f(*args, **kwargs)
     return wrapper
@@ -27,17 +82,63 @@ def session_required(f):
 def find_driver(rest_id):
     rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
     rest_long = Restaurant.objects.get(id=rest_id).rest_long
-    distance = 2**10
-    print(list(Driver.objects.filter(occupied=False)))
+    # a day
+    duration = 86400
+    # print(list(Driver.objects.filter(occupied=False)))
     for driver in Driver.objects.filter(occupied=False):
         div_lat = driver.driver_lat
         div_long = driver.driver_long
-        current = sqrt((rest_long-div_long)**2 + (rest_lat-div_lat)**2)
+        current = duration({'lat': div_lat, 'lng': div_long},
+                           {'lat': rest_lat, 'lng': rest_long})
         if current < distance:
             distance = current
             div_id = driver.id
-    return div_id
+    if duration != 86400:
+        return div_id
+    else:
+        find_driver(rest_id)
 
+
+def second_orders_filter(orders, first_order):
+    rest_id = Order.objects.get(id=first_order).restaurant_id
+    rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
+    rest_long = Restaurant.objects.get(id=rest_id).rest_long
+    first_lat = Order.objects.get(id=first_order).customer_lat
+    first_long = Order.objects.get(id=first_order).customer_long
+    driver_id = Order.objects.get(id=first_order).driver_id
+    driver_lat = Driver.objects.get(id=driver_id).driver_lat
+    driver_long = Driver.objects.get(id=driver_id).driver_long
+    first_time = duration({'lat': rest_lat, 'lng': rest_long},
+                       {'lat': first_lat, 'lng': first_long})
+    first_time = first_time + duration({'lat': driver_lat, 'lng': driver_long},
+                       {'lat': rest_lat, 'lng': rest_long})
+    if first_time > 1800:
+        orders.clear()
+        return
+    for order in orders:
+        first_order_first = duration({'lat': rest_lat, 'lng': rest_long},
+                    [{'lat': first_lat, 'lng': first_long},
+                    {'lat': order.customer_lat, 'lng': order.customer_long}])
+
+        second_order_first = duration({'lat': rest_lat, 'lng': rest_long},
+                    [{'lat': order.customer_lat,'lng': order.customer_long},
+                    {'lat': first_lat, 'lng': first_lat}])
+        if first_order_first <= second_order_first:
+            total_time = first_order_first
+        else:
+            total_time = second_order_first
+        if total_time > 2400:
+            orders.remove(order)
+    return
+
+
+def driver_fee(miles):
+    if miles <= 1:
+        return 6
+    elif miles <= 2:
+        return 8
+    else:
+        return 6 + round(miles - 1) * 2
 
 
 class RestaurantViewSet(viewsets.ModelViewSet):
@@ -49,46 +150,86 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     def login(self, request, pk="r"):
         email = request.data['email']
         password = request.data['password']
-        # check the object existing
         rest = get_list_or_404(RestaurantViewSet.queryset, email=email,
                                password=password)
-        request.session['id'] = rest[0].id
-        return Response(rest[0].getter())
+        key = secrets.token_hex(16)
+        num = Restaurant.objects.get(email=rest[0].getter()['email']).id
+        token = Token(keys=key, user_id=num)
+        token.save()
+        # request.session['id'] = rest[0].id
+        user_info = rest[0].getter()
+        user_info['key'] = key
+        return Response(user_info, status=200)
 
     @detail_route(methods=['delete'], url_path='logout')
-    @session_required
+    # @session_required
+    @token_required
     def logout(self, request, pk="r"):
         del request.session['id']
         return Response('Logged out', status=200)
 
     @detail_route(methods=['get'], url_path='dashboard')
-    @session_required
+    # @session_required
+    @token_required
     def dashboard(self, request, pk="r"):
-        rest_id = request.session['id']
+        rest_id = request.data['token']
         rest = get_list_or_404(RestaurantViewSet.queryset, id=rest_id)
         return Response(rest[0].getter())
 
+    @detail_route(methods=['post'], url_path='route')
+    #@session_required
+    @token_required
+    def route(self, request, pk='r'):
+        first_id = request.data['first_id']
+        first_lat = Order.objects.filter(id=first_id).customer_lat
+        first_long = Order.objects.filter(id=first_id).customer_long
+        rest_lat = Order.objects.filter(id=first_id).customer_lat
+        rest_long = Order.objects.filter(id=first_id).customer_long
+        driver_id = Order.objects.filter(id=first_id).driver_id
+        driver_lat = Driver.objects.filter(id=driver_id).driver_lat
+        driver_long = Driver.objects.filter(id=driver_id).driver_long
+        second_order = Order.objects.filter(driver_id=driver_id, status='S3')
+        if second_order:
+            second_lat = second_order.customer_lat
+            second_long = second_order.customer_long
+            location = {'rest': [rest_lat, rest_long],
+                        "driver": [driver_lat, driver_long],
+                        'first': [first_lat, first_long],
+                        'second': [second_lat, second_long]}
+            sort_location = order_sort(location)
+            if sort_location != location:
+                return Response(sort_location, status=200)
+        return Response({'rest': [rest_lat, rest_long],
+                         "driver": [driver_lat, driver_long],
+                         'first': [first_lat, first_long]}, status=200)
+
     @detail_route(methods=['post'], url_path='post')
-    @session_required
+    #@session_required
+    @token_required
     def post(self, request, pk='r'):
-        rest_id = request.session['id']
+        rest_id = Token.objects.get(keys=request.data['key']).user_id
         customer_lat = request.data['lat']
         customer_long = request.data['long']
         order_price = request.data['price']
-        driver_id = find_driver(rest_id)
+        # driver_id = find_driver(rest_id)
+        driver_id = 1
+        fee = fee_computation(rest_id, {'lat': customer_lat,
+                                        'lng': customer_long})
         order_obj = Order(restaurant_id=rest_id,
                           driver_id=driver_id, customer_lat=customer_lat,
                           customer_long=customer_long,
-                          order_price=order_price, status='S1',)
+                          order_price=order_price,
+                          fee=fee)
         order_obj.save()
         return Response(None, status=200)
 
     @detail_route(methods=['get'], url_path='order')
-    @session_required
+    # @session_required
+    @token_required
     def order(self, request, pk='r'):
         rest_id = request.session['id']
         orders = get_list_or_404(Order.objects, restaurant_id=rest_id)
-        print(get_list_or_404(Order.objects, restaurant_id=rest_id))
+        # print(get_list_or_404(Order.objects, restaurant_id=rest_id))
         test = []
         for order in orders:
             test.append(order.getter())
@@ -112,13 +253,15 @@ class DriverViewSet(viewsets.ModelViewSet):
         return Response(driver[0].getter())
 
     @detail_route(methods=['delete'], url_path='logout')
-    @session_required
+    # @session_required
+    @token_required
     def logout(self, request, pk="r"):
         del request.session['id']
         return Response('Logged out', status=200)
 
     @detail_route(methods=['get'], url_path='dashboard')
-    @session_required
+    # @session_required
+    @token_required
     def dashboard(self, request, pk="r"):
         driver_id = request.session['id']
         driver = get_list_or_404(DriverViewSet.queryset, id=driver_id)
@@ -126,7 +269,8 @@ class DriverViewSet(viewsets.ModelViewSet):
 
     # Get first order
     @detail_route(methods=['get'], url_path='order')
-    @session_required
+    # @session_required
+    @token_required
     def order(self, request, pk='r'):
         div_id = request.session['id']
         orders = get_list_or_404(Order.objects, driver_id=div_id)
@@ -134,24 +278,75 @@ class DriverViewSet(viewsets.ModelViewSet):
 
     # Order id needed
     # accept the first order or the second
-    @detail_route(methods=['post'], url_path='acceptation')
-    @session_required
-    def acceptation(self, request, pk='r'):
+    @detail_route(methods=['post'], url_path='first_acceptation')
+    # @session_required
+    @token_required
+    def first_acceptation(self, request, pk='r'):
         order_id = request.data['order_id']
         div_id = request.session['id']
-        Driver.objects.get(id=div_id).occupied = True
+        Driver.objects.get(id=div_id).update(occupied=True)
         Order.objects.filter(id=order_id).update(status="S2")
         rest_id = Order.objects.get(id=order_id).restaurant_id
         orders = Order.objects.filter(restaurant_id=rest_id, status='S1')
-        orders_accepted = []
+        second_orders = []
         for order in orders:
-            orders_accepted.append(order.getter())
-        return Response(orders_accepted, status=200)
+            print(order)
+            second_orders.append(order.getter())
+        second_orders_filter(second_orders, order_id)
+        return Response(second_orders, status=200)
+
+    @detail_route(methods=['post'], url_path='second_acceptation')
+    # @session_required
+    @token_required
+    def second_acceptation(self, request, pk='r'):
+        order_id = request.data['order_id']
+        div_id = request.session['id']
+        Order.objects.filter(id=order_id).update(status="S2")
+        Order.objects.filter(id=order_id).update(driver_id=div_id)
+        return Response(status=200)
+
+    # the first order always delivery first
+    @detail_route(methods=['post'], url_path='route')
+    # @session_required
+    @token_required
+    def route(self, request, pk='r'):
+        first_id = request.data['first_id']
+        first_lat = Order.objects.filter(id=first_id).customer_lat
+        first_long = Order.objects.filter(id=first_id).customer_long
+        rest_lat = Order.objects.filter(id=first_id).customer_lat
+        rest_long = Order.objects.filter(id=first_id).customer_long
+        driver_id = Order.objects.filter(id=first_id).driver_id
+        driver_lat = Driver.objects.filter(id=driver_id).driver_lat
+        driver_long = Driver.objects.filter(id=driver_id).driver_long
+        if request.data['second_id']:
+            second_id = request.data['second_id']
+            second_lat = Order.objects.filter(id=second_id).customer_lat
+            second_long = Order.objects.filter(id=second_id).customer_long
+            two_orders = order_sort({'rest': [rest_lat, rest_long],
+                             "driver": [driver_lat, driver_long],
+                             'first': [first_lat, first_long],
+                             'second': [second_lat, second_long]})
+            return Response(two_orders, status=200)
+        return Response({'rest': [rest_lat, rest_long],
+                         "driver": [driver_lat, driver_long],
+                         'first': [first_lat, first_long]}, status=200)
+
+    @detail_route(methods=['post'], url_path='update')
+    # @session_required
+    @token_required
+    def update_driver(self, request, pk='r'):
+        driver_id = request.session['id']
+        driver_lat = request.data['driver_lat']
+        driver_long = request.data['driver_long']
+        Driver.objects.filter(id=driver_id).update(driver_lat=driver_lat)
+        Driver.objects.filter(id=driver_id).update(driver_long=driver_long)
+        return Response(status=200)
 
     # list of orders' id needed
     # Return at most two address and driver's location(index 0)
     @detail_route(methods=['post'], url_path='confirmation')
-    @session_required
+    # @session_required
+    @token_required
     def confirmation(self, request, pk='r'):
         orders_id = request.data['order_id']
         customer_address = []
@@ -168,32 +363,30 @@ class DriverViewSet(viewsets.ModelViewSet):
             location = {'lat': Order.objects.get(id=order_id).customer_lat,
                         'long': Order.objects.get(id=order_id).customer_long}
             customer_address.append(location)
-
         return Response(customer_address, status=200)
 
     # to change something when finished one order
     @detail_route(methods=['post'], url_path='delivered')
-    @session_required
+    # @session_required
+    @token_required
     def delivered(self, request, pk='r'):
         order_id = request.data['order_id']
-        order = Order.objects.get(id=order_id)
-        order.status = "S4"
+        order = Order.objects.filter(id=order_id)
+        order_info = Order.objects.get(id=order_id)
+        order.update(status="S4")
         div_id = request.session['id']
-        div = Driver.objects.get(id=div_id)
-        div.driver_long = order.customer_long
-        div.driver_lat = order.customer_lat
-        div.income += order.fee
-        rest = Restaurant.objects.get(id=order.restaurant_id)
-        rest.income += order.order_price
+        div_info = Driver.objects.get(id=div_id)
+        div = Driver.objects.filter(id=div_id)
+        div.update(driver_long=order_info.customer_long)
+        div.update(driver_lat=order_info.customer_lat)
+        div.update(income=div_info.income + order_info.fee)
+        rest = Restaurant.objects.filter(id=order_info.restaurant_id)
+        rest_info = Restaurant.objects.get(id=order_info.restaurant_id)
+        rest.update(income=order_info.order_price + rest_info.income)
         if not Order.objects.filter(driver_id=div_id, status='S3').exists():
-            div.occupied = False
+            div.update(occupied=False)
         return Response("finish an order, good job!", status=200)
 
-# @session_required
-# class OrderViewSet(viewsets.ModelViewSet):
-#     queryset = Order.objects.all()
-#     serializer_class = OrderSerializer
-#     parser_classes = (JSONParser,)
 
 
 
