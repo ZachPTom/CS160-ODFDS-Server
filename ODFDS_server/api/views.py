@@ -33,7 +33,7 @@ def order_sort(location):
 
     second_order_first = duration({'lat': location['rest'][0],
                                   'lng': location['rest'][1]},
-                                 [{'lat': location['second'][0],
+                                  [{'lat': location['second'][0],
                                    'lng':location['second'][1]},
                                   {'lat': location['first'][0],
                                    'lng': location['first'][1]}])
@@ -57,15 +57,6 @@ def fee_computation(rest_id, destination):
     return driver_fee(miles)
 
 
-# def session_required(f):
-#     @wraps(f)
-#     def wrapper(*args, **kwargs):
-#         session = args[1].session.get('id', None)
-#         if not session:
-#             return HttpResponse('Not logged in', status=401)
-#         return f(*args, **kwargs)
-#     return wrapper
-
 def token_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
@@ -84,7 +75,6 @@ def find_driver(rest_id):
     rest_long = Restaurant.objects.get(id=rest_id).rest_long
     # a day
     duration = 86400
-    # print(list(Driver.objects.filter(occupied=False)))
     for driver in Driver.objects.filter(occupied=False):
         div_lat = driver.driver_lat
         div_long = driver.driver_long
@@ -156,28 +146,24 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         num = Restaurant.objects.get(email=rest[0].getter()['email']).id
         token = Token(keys=key, user_id=num)
         token.save()
-        # request.session['id'] = rest[0].id
         user_info = rest[0].getter()
         user_info['key'] = key
         return Response(user_info, status=200)
 
     @detail_route(methods=['delete'], url_path='logout')
-    # @session_required
     @token_required
     def logout(self, request, pk="r"):
-        del request.session['id']
-        return Response('Logged out', status=200)
+        Token.objects.filter(keys=request.data['key']).delete()
+        return Response(status=200)
 
-    @detail_route(methods=['get'], url_path='dashboard')
-    # @session_required
+    @detail_route(methods=['post'], url_path='dashboard')
     @token_required
     def dashboard(self, request, pk="r"):
-        rest_id = request.data['token']
+        rest_id = Token.objects.get(keys=request.data['token']).user_id
         rest = get_list_or_404(RestaurantViewSet.queryset, id=rest_id)
         return Response(rest[0].getter())
 
     @detail_route(methods=['post'], url_path='route')
-    #@session_required
     @token_required
     def route(self, request, pk='r'):
         first_id = request.data['first_id']
@@ -204,14 +190,12 @@ class RestaurantViewSet(viewsets.ModelViewSet):
                          'first': [first_lat, first_long]}, status=200)
 
     @detail_route(methods=['post'], url_path='post')
-    #@session_required
     @token_required
     def post(self, request, pk='r'):
         rest_id = Token.objects.get(keys=request.data['key']).user_id
         customer_lat = request.data['lat']
         customer_long = request.data['long']
         order_price = request.data['price']
-        # driver_id = find_driver(rest_id)
         driver_id = 1
         fee = fee_computation(rest_id, {'lat': customer_lat,
                                         'lng': customer_long})
@@ -221,15 +205,13 @@ class RestaurantViewSet(viewsets.ModelViewSet):
                           order_price=order_price,
                           fee=fee)
         order_obj.save()
-        return Response(None, status=200)
+        return Response(status=200)
 
-    @detail_route(methods=['get'], url_path='order')
-    # @session_required
+    @detail_route(methods=['post'], url_path='order')
     @token_required
     def order(self, request, pk='r'):
-        rest_id = request.session['id']
+        rest_id = Token.objects.get(keys=request.data['key']).user_id
         orders = get_list_or_404(Order.objects, restaurant_id=rest_id)
-        # print(get_list_or_404(Order.objects, restaurant_id=rest_id))
         test = []
         for order in orders:
             test.append(order.getter())
@@ -246,68 +228,65 @@ class DriverViewSet(viewsets.ModelViewSet):
     def login(self, request, pk="r"):
         email = request.data['email']
         password = request.data['password']
-        # check the object existing
         driver = get_list_or_404(DriverViewSet.queryset, email=email,
                                  password=password)
-        request.session['id'] = driver[0].id
-        return Response(driver[0].getter())
+        key = secrets.token_hex(16)
+        num = Restaurant.objects.get(email=rest[0].getter()['email']).id
+        token = Token(keys=key, user_id=num)
+        token.save()
+        user_info = driver[0].getter()
+        user_info['key'] = key
+        return Response(user_info, status=200)
 
     @detail_route(methods=['delete'], url_path='logout')
-    # @session_required
     @token_required
     def logout(self, request, pk="r"):
-        del request.session['id']
-        return Response('Logged out', status=200)
+        Token.objects.filter(keys=request.data['key']).delete()
+        return Response(status=200)
 
-    @detail_route(methods=['get'], url_path='dashboard')
-    # @session_required
+    @detail_route(methods=['post'], url_path='dashboard')
     @token_required
     def dashboard(self, request, pk="r"):
-        driver_id = request.session['id']
+        driver_id = Token.objects.get(keys=request.data['key']).user_id
         driver = get_list_or_404(DriverViewSet.queryset, id=driver_id)
         return Response(driver[0].getter())
 
     # Get first order
-    @detail_route(methods=['get'], url_path='order')
-    # @session_required
+    @detail_route(methods=['post'], url_path='order')
     @token_required
     def order(self, request, pk='r'):
-        div_id = request.session['id']
-        orders = get_list_or_404(Order.objects, driver_id=div_id)
+        div_id = Token.objects.get(keys=request.data['key']).user_id
+        orders = get_list_or_404(Order.objects, driver_id=div_id, ststus='S1')
         return Response(orders[0].getter(), status=200)
 
     # Order id needed
     # accept the first order or the second
     @detail_route(methods=['post'], url_path='first_acceptation')
-    # @session_required
     @token_required
     def first_acceptation(self, request, pk='r'):
         order_id = request.data['order_id']
-        div_id = request.session['id']
+        div_id = Token.objects.get(keys=request.data['key']).user_id
         Driver.objects.get(id=div_id).update(occupied=True)
         Order.objects.filter(id=order_id).update(status="S2")
         rest_id = Order.objects.get(id=order_id).restaurant_id
         orders = Order.objects.filter(restaurant_id=rest_id, status='S1')
         second_orders = []
         for order in orders:
-            print(order)
             second_orders.append(order.getter())
         second_orders_filter(second_orders, order_id)
         return Response(second_orders, status=200)
 
     @detail_route(methods=['post'], url_path='second_acceptation')
-    # @session_required
     @token_required
     def second_acceptation(self, request, pk='r'):
         order_id = request.data['order_id']
-        div_id = request.session['id']
+        div_id = Token.objects.get(keys=request.data['key']).user_id
         Order.objects.filter(id=order_id).update(status="S2")
         Order.objects.filter(id=order_id).update(driver_id=div_id)
         return Response(status=200)
 
     # the first order always delivery first
     @detail_route(methods=['post'], url_path='route')
-    # @session_required
     @token_required
     def route(self, request, pk='r'):
         first_id = request.data['first_id']
@@ -332,10 +311,9 @@ class DriverViewSet(viewsets.ModelViewSet):
                          'first': [first_lat, first_long]}, status=200)
 
     @detail_route(methods=['post'], url_path='update')
-    # @session_required
     @token_required
     def update_driver(self, request, pk='r'):
-        driver_id = request.session['id']
+        driver_id = Token.objects.get(keys=request.data['key']).user_id
         driver_lat = request.data['driver_lat']
         driver_long = request.data['driver_long']
         Driver.objects.filter(id=driver_id).update(driver_lat=driver_lat)
@@ -345,36 +323,33 @@ class DriverViewSet(viewsets.ModelViewSet):
     # list of orders' id needed
     # Return at most two address and driver's location(index 0)
     @detail_route(methods=['post'], url_path='confirmation')
-    # @session_required
     @token_required
     def confirmation(self, request, pk='r'):
         orders_id = request.data['order_id']
-        customer_address = []
-        div_id = request.session['id']
+        # customer_address = []
+        div_id = Token.objects.get(keys=request.data['key']).user_id
         rest_id = Order.objects.get(id=orders_id[0]).restaurant_id
         div = Driver.objects.get(id=div_id)
         rest = Restaurant.objects.get(id=rest_id)
         div.driver_long = rest.rest_long
         div.driver_lat = rest.rest_lat
-        div_location = {'lat': div.driver_long, 'long': div.driver_lat}
-        customer_address.append(div_location)
+        # div_location = {'lat': div.driver_long, 'long': div.driver_lat}
+        # customer_address.append(div_location)
         for order_id in orders_id:
             Order.objects.get(id=order_id).status = "S3"
-            location = {'lat': Order.objects.get(id=order_id).customer_lat,
-                        'long': Order.objects.get(id=order_id).customer_long}
-            customer_address.append(location)
-        return Response(customer_address, status=200)
+            # location = {'lat': Order.objects.get(id=order_id).customer_lat,
+            #             'long': Order.objects.get(id=order_id).customer_long}
+            # customer_address.append(location)
+        return Response(status=200)
 
-    # to change something when finished one order
     @detail_route(methods=['post'], url_path='delivered')
-    # @session_required
     @token_required
     def delivered(self, request, pk='r'):
         order_id = request.data['order_id']
         order = Order.objects.filter(id=order_id)
         order_info = Order.objects.get(id=order_id)
         order.update(status="S4")
-        div_id = request.session['id']
+        div_id = Token.objects.get(keys=request.data['key']).user_id
         div_info = Driver.objects.get(id=div_id)
         div = Driver.objects.filter(id=div_id)
         div.update(driver_long=order_info.customer_long)
@@ -385,7 +360,7 @@ class DriverViewSet(viewsets.ModelViewSet):
         rest.update(income=order_info.order_price + rest_info.income)
         if not Order.objects.filter(driver_id=div_id, status='S3').exists():
             div.update(occupied=False)
-        return Response("finish an order, good job!", status=200)
+        return Response(status=200)
 
 
 

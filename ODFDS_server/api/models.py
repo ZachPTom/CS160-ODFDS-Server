@@ -16,15 +16,6 @@ class Driver(models.Model):
     driver_long = models.FloatField(default=None, validators=[
         MaxValueValidator(180), MinValueValidator(-180)])
     occupied = models.BooleanField(default=False)
-    # phone = models.BigIntegerField(unique=True, validators=[
-    # MaxValueValidator(9999999999), MinValueValidator(1000000000)])
-    # other information
-    # time_joined = models.DateField(auto_now_add=True)
-    # ssn = models.IntegerField(unique=True, validators=[
-    # MaxValueValidator(999999999), MinValueValidator(100000000)])
-    # date_of_birth = models.DateField()
-    # car_plate = models.CharField(max_length=10)
-    # car_model = models.CharField(max_length=20)
 
     def __str__(self):
         return self.first_name + ' ' + self.last_name
@@ -50,9 +41,6 @@ class Restaurant(models.Model):
         MaxValueValidator(90), MinValueValidator(-90)])
     rest_long = models.FloatField(default=None, validators=[
         MaxValueValidator(180), MinValueValidator(-180)])
-    # phone = models.BigIntegerField(unique=True, validators=[
-    # MaxValueValidator(9999999999), MinValueValidator(1000000000)])
-    # other information
 
     def __str__(self):
         return self.restaurant_name
