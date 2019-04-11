@@ -16,10 +16,10 @@ def duration(origin, destination):
     directions_result = gmaps.distance_matrix(origin, destination,
                                               mode='driving')
     if type(destination) is list:
-        return int(directions_result['rows'][0]['elements'][0]['duration']
-                ['value']) + int(directions_result['rows'][0]['elements'][1]
+        return float(directions_result['rows'][0]['elements'][0]['duration']
+                ['value']) + float(directions_result['rows'][0]['elements'][1]
                 ['duration']['value'])
-    return int(directions_result['rows'][0]['elements'][0]['duration'][
+    return float(directions_result['rows'][0]['elements'][0]['duration'][
                     'value'])
 
 
@@ -60,10 +60,8 @@ def fee_computation(rest_id, destination):
 def token_required(f):
     @wraps(f)
     def wrapper(*args, **kwargs):
-        print(args[1].data.get('key', None))
         num_result = Token.objects.filter(keys=args[1].data.get('key',
                                                                 None)).count()
-        print(num_result)
         if not num_result:
             return HttpResponse('Not logged in', status=401)
         return f(*args, **kwargs)
@@ -74,16 +72,16 @@ def find_driver(rest_id):
     rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
     rest_long = Restaurant.objects.get(id=rest_id).rest_long
     # a day
-    duration = 86400
+    max_time = 86400
     for driver in Driver.objects.filter(occupied=False):
         div_lat = driver.driver_lat
         div_long = driver.driver_long
-        current = duration({'lat': div_lat, 'lng': div_long},
-                           {'lat': rest_lat, 'lng': rest_long})
-        if current < distance:
-            distance = current
+        current = duration({'lat': div_lat, 'lng': div_long}, {'lat':
+                                    rest_lat, 'lng': rest_long})
+        if current < max_time:
+            max_time = current
             div_id = driver.id
-    if duration != 86400:
+    if max_time != 86400:
         return div_id
     else:
         find_driver(rest_id)
@@ -108,11 +106,11 @@ def second_orders_filter(orders, first_order):
     for order in orders:
         first_order_first = duration({'lat': rest_lat, 'lng': rest_long},
                     [{'lat': first_lat, 'lng': first_long},
-                    {'lat': order.customer_lat, 'lng': order.customer_long}])
-
+                    {'lat': order['address'][0], 'lng': order['address'][1]}])
         second_order_first = duration({'lat': rest_lat, 'lng': rest_long},
-                    [{'lat': order.customer_lat,'lng': order.customer_long},
-                    {'lat': first_lat, 'lng': first_lat}])
+                    [{'lat': order['address'][0], 'lng': order['address'][1]},
+                    {'lat': first_lat, 'lng': first_long}])
+
         if first_order_first <= second_order_first:
             total_time = first_order_first
         else:
@@ -159,32 +157,39 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     @detail_route(methods=['post'], url_path='dashboard')
     @token_required
     def dashboard(self, request, pk="r"):
-        rest_id = Token.objects.get(keys=request.data['token']).user_id
+        rest_id = Token.objects.get(keys=request.data['key']).user_id
         rest = get_list_or_404(RestaurantViewSet.queryset, id=rest_id)
         return Response(rest[0].getter())
 
     @detail_route(methods=['post'], url_path='route')
     @token_required
     def route(self, request, pk='r'):
-        first_id = request.data['first_id']
-        first_lat = Order.objects.filter(id=first_id).customer_lat
-        first_long = Order.objects.filter(id=first_id).customer_long
-        rest_lat = Order.objects.filter(id=first_id).customer_lat
-        rest_long = Order.objects.filter(id=first_id).customer_long
-        driver_id = Order.objects.filter(id=first_id).driver_id
-        driver_lat = Driver.objects.filter(id=driver_id).driver_lat
-        driver_long = Driver.objects.filter(id=driver_id).driver_long
-        second_order = Order.objects.filter(driver_id=driver_id, status='S3')
-        if second_order:
-            second_lat = second_order.customer_lat
-            second_long = second_order.customer_long
+        first_id = request.data['order_id']
+        first_lat = Order.objects.get(id=first_id).customer_lat
+        first_long = Order.objects.get(id=first_id).customer_long
+        rest_id = Order.objects.get(id=first_id).restaurant_id
+        rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
+        rest_long = Restaurant.objects.get(id=rest_id).rest_long
+        driver_id = Order.objects.get(id=first_id).driver_id
+        driver_lat = Driver.objects.get(id=driver_id).driver_lat
+        driver_long = Driver.objects.get(id=driver_id).driver_long
+        order_List = []
+        for order in Order.objects.filter(driver_id=driver_id, status='S3'):
+            order_List.append(order.getter())
+        if len(order_List) == 2:
+            for order in order_List:
+                if order['id'] == first_id:
+                    order_List.remove(order)
+            second_order = order_List[0]
+            second_lat = second_order['address'][0]
+            second_long = second_order['address'][1]
             location = {'rest': [rest_lat, rest_long],
                         "driver": [driver_lat, driver_long],
                         'first': [first_lat, first_long],
                         'second': [second_lat, second_long]}
-            sort_location = order_sort(location)
-            if sort_location != location:
-                return Response(sort_location, status=200)
+            location = order_sort(location)
+            if location['first'][0] != first_lat or location['first'][1] != first_long:
+                return Response(location, status=200)
         return Response({'rest': [rest_lat, rest_long],
                          "driver": [driver_lat, driver_long],
                          'first': [first_lat, first_long]}, status=200)
@@ -196,7 +201,7 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         customer_lat = request.data['lat']
         customer_long = request.data['long']
         order_price = request.data['price']
-        driver_id = 1
+        driver_id = find_driver(rest_id)
         fee = fee_computation(rest_id, {'lat': customer_lat,
                                         'lng': customer_long})
         order_obj = Order(restaurant_id=rest_id,
@@ -212,10 +217,10 @@ class RestaurantViewSet(viewsets.ModelViewSet):
     def order(self, request, pk='r'):
         rest_id = Token.objects.get(keys=request.data['key']).user_id
         orders = get_list_or_404(Order.objects, restaurant_id=rest_id)
-        test = []
+        order_List = []
         for order in orders:
-            test.append(order.getter())
-        return Response(test, status=200)
+            order_List.append(order.getter())
+        return Response(order_List, status=200)
 
 
 # Create your views here.
@@ -231,7 +236,7 @@ class DriverViewSet(viewsets.ModelViewSet):
         driver = get_list_or_404(DriverViewSet.queryset, email=email,
                                  password=password)
         key = secrets.token_hex(16)
-        num = Restaurant.objects.get(email=rest[0].getter()['email']).id
+        num = Driver.objects.get(email=driver[0].getter()['email']).id
         token = Token(keys=key, user_id=num)
         token.save()
         user_info = driver[0].getter()
@@ -256,8 +261,11 @@ class DriverViewSet(viewsets.ModelViewSet):
     @token_required
     def order(self, request, pk='r'):
         div_id = Token.objects.get(keys=request.data['key']).user_id
-        orders = get_list_or_404(Order.objects, driver_id=div_id, ststus='S1')
-        return Response(orders[0].getter(), status=200)
+        orders = get_list_or_404(Order.objects, driver_id=div_id, status='S1')
+        order_List = []
+        for order in orders:
+            order_List.append(order.getter())
+        return Response(order_List, status=200)
 
     # Order id needed
     # accept the first order or the second
@@ -266,7 +274,7 @@ class DriverViewSet(viewsets.ModelViewSet):
     def first_acceptation(self, request, pk='r'):
         order_id = request.data['order_id']
         div_id = Token.objects.get(keys=request.data['key']).user_id
-        Driver.objects.get(id=div_id).update(occupied=True)
+        Driver.objects.filter(id=div_id).update(occupied=True)
         Order.objects.filter(id=order_id).update(status="S2")
         rest_id = Order.objects.get(id=order_id).restaurant_id
         orders = Order.objects.filter(restaurant_id=rest_id, status='S1')
@@ -290,17 +298,18 @@ class DriverViewSet(viewsets.ModelViewSet):
     @token_required
     def route(self, request, pk='r'):
         first_id = request.data['first_id']
-        first_lat = Order.objects.filter(id=first_id).customer_lat
-        first_long = Order.objects.filter(id=first_id).customer_long
-        rest_lat = Order.objects.filter(id=first_id).customer_lat
-        rest_long = Order.objects.filter(id=first_id).customer_long
-        driver_id = Order.objects.filter(id=first_id).driver_id
-        driver_lat = Driver.objects.filter(id=driver_id).driver_lat
-        driver_long = Driver.objects.filter(id=driver_id).driver_long
+        first_lat = Order.objects.get(id=first_id).customer_lat
+        first_long = Order.objects.get(id=first_id).customer_long
+        rest_id = Order.objects.get(id=first_id).restaurant_id
+        rest_lat = Restaurant.objects.get(id=rest_id).rest_lat
+        rest_long = Restaurant.objects.get(id=rest_id).rest_long
+        driver_id = Order.objects.get(id=first_id).driver_id
+        driver_lat = Driver.objects.get(id=driver_id).driver_lat
+        driver_long = Driver.objects.get(id=driver_id).driver_long
         if request.data['second_id']:
             second_id = request.data['second_id']
-            second_lat = Order.objects.filter(id=second_id).customer_lat
-            second_long = Order.objects.filter(id=second_id).customer_long
+            second_lat = Order.objects.get(id=second_id).customer_lat
+            second_long = Order.objects.get(id=second_id).customer_long
             two_orders = order_sort({'rest': [rest_lat, rest_long],
                              "driver": [driver_lat, driver_long],
                              'first': [first_lat, first_long],
@@ -326,20 +335,14 @@ class DriverViewSet(viewsets.ModelViewSet):
     @token_required
     def confirmation(self, request, pk='r'):
         orders_id = request.data['order_id']
-        # customer_address = []
         div_id = Token.objects.get(keys=request.data['key']).user_id
         rest_id = Order.objects.get(id=orders_id[0]).restaurant_id
-        div = Driver.objects.get(id=div_id)
+        div = Driver.objects.filter(id=div_id)
         rest = Restaurant.objects.get(id=rest_id)
-        div.driver_long = rest.rest_long
-        div.driver_lat = rest.rest_lat
-        # div_location = {'lat': div.driver_long, 'long': div.driver_lat}
-        # customer_address.append(div_location)
+        div.update(driver_long=rest.rest_long)
+        div.update(driver_lat=rest.rest_lat)
         for order_id in orders_id:
-            Order.objects.get(id=order_id).status = "S3"
-            # location = {'lat': Order.objects.get(id=order_id).customer_lat,
-            #             'long': Order.objects.get(id=order_id).customer_long}
-            # customer_address.append(location)
+            Order.objects.filter(id=order_id).update(status="S3")
         return Response(status=200)
 
     @detail_route(methods=['post'], url_path='delivered')
