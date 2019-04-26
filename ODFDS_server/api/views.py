@@ -285,7 +285,12 @@ class DriverViewSet(viewsets.ModelViewSet):
         orders = Order.objects.filter(restaurant_id=rest_id, status='S1')
         second_orders = []
         for order in orders:
-            second_orders.append(order.getter())
+            this_order = order.getter()
+            rest = Restaurant.objects.get(id=this_order['rest'])
+            rest_address = [rest.rest_lat, rest.rest_long]
+            this_order['rest_address'] = rest_address
+            this_order['rest'] = rest.restaurant_name
+            second_orders.append(this_order)
         second_orders_filter(second_orders, order_id)
         return Response(second_orders, status=200)
 
