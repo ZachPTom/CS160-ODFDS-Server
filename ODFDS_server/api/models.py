@@ -83,7 +83,7 @@ class Order(models.Model):
 
     def getter(self):
         return {"id": self.id,
-                "customer_lat": self.customer_long,
+                'rest': self.restaurant_id,
                 "status": self.status,
                 "total_price": self.order_price+self.fee,
                 "address": [self.customer_lat, self.customer_long]}

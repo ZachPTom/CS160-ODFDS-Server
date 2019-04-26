@@ -264,7 +264,12 @@ class DriverViewSet(viewsets.ModelViewSet):
         orders = get_list_or_404(Order.objects, driver_id=div_id, status='S1')
         order_List = []
         for order in orders:
-            order_List.append(order.getter())
+            this_order = order.getter()
+            rest = Restaurant.objects.get(id=this_order['rest'])
+            rest_address = [rest.rest_lat, rest.rest_long]
+            this_order['rest_address'] = rest_address
+            this_order['rest'] = rest.restaurant_name
+            order_List.append(this_order)
         return Response(order_List, status=200)
 
     # Order id needed
