@@ -75,9 +75,6 @@ Satus: 200 SUCCESS
 #### http://127.0.0.1:8000/api/restaurant/r/order/ (POST)
 ##### Request Body:
 	{
-		"lat": "<float>",
-		"long" : "<float>",
-		"price" : "<float>",
 		"key": "<string>"
 	}
 #### Responses:
