@@ -9,6 +9,7 @@ from django.shortcuts import get_list_or_404
 from functools import wraps
 import googlemaps
 import secrets
+import datetime
 
 
 def duration(origin, destination):
@@ -208,6 +209,7 @@ class RestaurantViewSet(viewsets.ModelViewSet):
                           driver_id=driver_id, customer_lat=customer_lat,
                           customer_long=customer_long,
                           order_price=order_price,
+                          time=datetime.datetime.now(),
                           fee=fee)
         order_obj.save()
         return Response(status=200)
@@ -352,7 +354,9 @@ class DriverViewSet(viewsets.ModelViewSet):
         div.update(driver_long=rest.rest_long)
         div.update(driver_lat=rest.rest_lat)
         for order_id in orders_id:
-            Order.objects.filter(id=order_id).update(status="S3")
+            order = Order.objects.filter(id=order_id)
+            order.update(status="S3")
+            order.update(time=datetime.datetime.now())
         return Response(status=200)
 
     @detail_route(methods=['post'], url_path='delivered')
@@ -362,6 +366,7 @@ class DriverViewSet(viewsets.ModelViewSet):
         order = Order.objects.filter(id=order_id)
         order_info = Order.objects.get(id=order_id)
         order.update(status="S4")
+        order.update(time=datetime.datetime.now())
         div_id = Token.objects.get(keys=request.data['key']).user_id
         div_info = Driver.objects.get(id=div_id)
         div = Driver.objects.filter(id=div_id)

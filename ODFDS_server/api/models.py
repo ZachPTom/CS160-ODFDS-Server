@@ -62,6 +62,7 @@ class Order(models.Model):
         MaxValueValidator(180), MinValueValidator(-1)])
     order_price = models.FloatField(default=0)
     fee = models.FloatField(default=0)
+    time = models.DateTimeField(default=None)
     STEP1 = 'S1'
     STEP2 = 'S2'
     STEP3 = 'S3'
@@ -85,8 +86,11 @@ class Order(models.Model):
         return {"id": self.id,
                 'rest': self.restaurant_id,
                 "status": self.status,
-                "total_price": self.order_price+self.fee,
-                "address": [self.customer_lat, self.customer_long]}
+                "total_price": self.fee,
+                "food_price": self.order_price,
+                "address": [self.customer_lat, self.customer_long],
+                "time": self.time
+                }
 
 
 class Token(models.Model):
