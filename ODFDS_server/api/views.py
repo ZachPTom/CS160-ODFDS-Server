@@ -266,7 +266,8 @@ class DriverViewSet(viewsets.ModelViewSet):
 
     @detail_route(methods=['post'], url_path='history')
     @token_required
-    def order(self, request, pk='r'):
+
+    def order_history(self, request, pk='r'):
         div_id = Token.objects.get(keys=request.data['key']).user_id
         orders = get_list_or_404(Order.objects, driver_id=div_id, status='S4')
         order_List = []
@@ -288,16 +289,6 @@ class DriverViewSet(viewsets.ModelViewSet):
             this_order['rest_address'] = rest_address
             this_order['rest'] = rest.restaurant_name
             order_List.append(this_order)
-        return Response(order_List, status=200)
-
-    @detail_route(methods=['post'], url_path='history')
-    @token_required
-    def order(self, request, pk='r'):
-        div_id = Token.objects.get(keys=request.data['key']).user_id
-        orders = get_list_or_404(Order.objects, driver_id=div_id, status='S4')
-        order_List = []
-        for order in orders:
-            order_List.append(order.getter())
         return Response(order_List, status=200)
 
     # Order id needed
