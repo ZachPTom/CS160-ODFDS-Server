@@ -348,8 +348,8 @@ class DriverViewSet(viewsets.ModelViewSet):
     @token_required
     def update_driver(self, request, pk='r'):
         driver_id = Token.objects.get(keys=request.data['key']).user_id
-        driver_lat = float(request.data['driver'][0])
-        driver_long = float(request.data['driver'][1])
+        driver_lat = float(request.data['driver']['lat'])
+        driver_long = float(request.data['driver']['lng'])
         Driver.objects.filter(id=driver_id).update(driver_lat=driver_lat)
         Driver.objects.filter(id=driver_id).update(driver_long=driver_long)
         return Response(status=200)
