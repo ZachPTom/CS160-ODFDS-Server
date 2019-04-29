@@ -16,6 +16,7 @@ class Driver(models.Model):
     driver_long = models.FloatField(default=None, validators=[
         MaxValueValidator(180), MinValueValidator(-180)])
     occupied = models.BooleanField(default=False)
+    address = models.CharField()
 
     def __str__(self):
         return self.first_name + ' ' + self.last_name
@@ -26,7 +27,8 @@ class Driver(models.Model):
             "first_name": self.first_name,
             "last_name": self.last_name,
             "income": self.income,
-            "location": [self.driver_lat, self.driver_long]
+            "location": [self.driver_lat, self.driver_long],
+            "address": self.address
         }
 
 
