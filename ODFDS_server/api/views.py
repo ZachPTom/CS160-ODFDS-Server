@@ -116,7 +116,7 @@ def second_orders_filter(orders, first_order):
             total_time = first_order_first
         else:
             total_time = second_order_first
-        if total_time > 2400:
+        if total_time > 1800:
             orders.remove(order)
     return
 
@@ -177,6 +177,8 @@ class RestaurantViewSet(viewsets.ModelViewSet):
         order_List = []
         for order in Order.objects.filter(driver_id=driver_id, status='S3'):
             order_List.append(order.getter())
+        if not order_List:
+            return Response(status=404)
         if len(order_List) == 2:
             for order in order_List:
                 if order['id'] == first_id:
