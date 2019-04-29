@@ -56,7 +56,7 @@ class Restaurant(models.Model):
                 "income": self.income,
                 "address": [self.rest_lat, self.rest_long],
                 "addressstr": self.address
-        }
+                }
 
 
 class Order(models.Model):

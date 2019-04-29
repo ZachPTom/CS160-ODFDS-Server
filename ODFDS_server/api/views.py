@@ -17,9 +17,12 @@ def duration(origin, destination):
     directions_result = gmaps.distance_matrix(origin, destination,
                                               mode='driving')
     if type(destination) is list:
-        return float(directions_result['rows'][0]['elements'][0]['duration']
-                ['value']) + float(directions_result['rows'][0]['elements'][1]
-                ['duration']['value'])
+        first = float(directions_result['rows'][0]['elements'][0]['duration']
+                ['value'])
+        second = float(gmaps.distance_matrix(destination[0], destination[1],mode='driving')
+        ['rows'][0]['elements'][0]['duration']['value'])
+        return  first + second
+                
     return float(directions_result['rows'][0]['elements'][0]['duration'][
                     'value'])
 
@@ -38,6 +41,7 @@ def order_sort(location):
                                    'lng':location['second'][1]},
                                   {'lat': location['first'][0],
                                    'lng': location['first'][1]}])
+
     if first_order_first <= second_order_first:
         return location
     else:
@@ -286,6 +290,16 @@ class DriverViewSet(viewsets.ModelViewSet):
             order_List.append(this_order)
         return Response(order_List, status=200)
 
+    @detail_route(methods=['post'], url_path='history')
+    @token_required
+    def order(self, request, pk='r'):
+        div_id = Token.objects.get(keys=request.data['key']).user_id
+        orders = get_list_or_404(Order.objects, driver_id=div_id, status='S4')
+        order_List = []
+        for order in orders:
+            order_List.append(order.getter())
+        return Response(order_List, status=200)
+
     # Order id needed
     # accept the first order or the second
     @detail_route(methods=['post'], url_path='first_acceptation')
@@ -347,8 +361,8 @@ class DriverViewSet(viewsets.ModelViewSet):
     @token_required
     def update_driver(self, request, pk='r'):
         driver_id = Token.objects.get(keys=request.data['key']).user_id
-        driver_lat = request.data['driver_lat']
-        driver_long = request.data['driver_long']
+        driver_lat = float(request.data['driver']['lat'])
+        driver_long = float(request.data['driver']['lng'])
         Driver.objects.filter(id=driver_id).update(driver_lat=driver_lat)
         Driver.objects.filter(id=driver_id).update(driver_long=driver_long)
         return Response(status=200)
