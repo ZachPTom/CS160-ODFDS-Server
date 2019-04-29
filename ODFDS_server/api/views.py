@@ -17,9 +17,12 @@ def duration(origin, destination):
     directions_result = gmaps.distance_matrix(origin, destination,
                                               mode='driving')
     if type(destination) is list:
-        return float(directions_result['rows'][0]['elements'][0]['duration']
-                ['value']) + float(directions_result['rows'][0]['elements'][1]
-                ['duration']['value'])
+        first = float(directions_result['rows'][0]['elements'][0]['duration']
+                ['value'])
+        second = float(gmaps.distance_matrix(destination[0], destination[1],mode='driving')
+        ['rows'][0]['elements'][0]['duration']['value'])
+        return  first + second
+                
     return float(directions_result['rows'][0]['elements'][0]['duration'][
                     'value'])
 
@@ -38,6 +41,7 @@ def order_sort(location):
                                    'lng':location['second'][1]},
                                   {'lat': location['first'][0],
                                    'lng': location['first'][1]}])
+
     if first_order_first <= second_order_first:
         return location
     else:
