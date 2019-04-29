@@ -43,6 +43,8 @@ class Restaurant(models.Model):
         MaxValueValidator(90), MinValueValidator(-90)])
     rest_long = models.FloatField(default=None, validators=[
         MaxValueValidator(180), MinValueValidator(-180)])
+    address = models.CharField(max_length=100, default="")
+
 
     def __str__(self):
         return self.restaurant_name
@@ -52,7 +54,9 @@ class Restaurant(models.Model):
                 "time_joined": self.time_joined,
                 "restaurant_name": self.restaurant_name,
                 "income": self.income,
-                "address": [self.rest_lat, self.rest_long]}
+                "address": [self.rest_lat, self.rest_long],
+                "addressstr": self.address
+        }
 
 
 class Order(models.Model):
