@@ -38,6 +38,7 @@ def order_sort(location):
                                    'lng':location['second'][1]},
                                   {'lat': location['first'][0],
                                    'lng': location['first'][1]}])
+
     if first_order_first <= second_order_first:
         return location
     else:
