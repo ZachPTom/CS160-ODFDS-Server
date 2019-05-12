@@ -66,8 +66,8 @@ class Order(models.Model):
         MaxValueValidator(90), MinValueValidator(-1)])
     customer_long = models.FloatField(default=-1, validators=[
         MaxValueValidator(180), MinValueValidator(-1)])
-    order_price = models.FloatField(default=0)
-    fee = models.FloatField(default=0)
+    order_price = models.FloatField(default=0, validators=[MinValueValidator(0)])
+    fee = models.FloatField(default=0, validators=[MinValueValidator(0)])
     time = models.DateTimeField(default=None)
     STEP1 = 'S1'
     STEP2 = 'S2'

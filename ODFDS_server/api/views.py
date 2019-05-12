@@ -17,9 +17,12 @@ def duration(origin, destination):
     directions_result = gmaps.distance_matrix(origin, destination,
                                               mode='driving')
     if type(destination) is list:
-        return float(directions_result['rows'][0]['elements'][0]['duration']
-                ['value']) + float(directions_result['rows'][0]['elements'][1]
-                ['duration']['value'])
+        first = float(directions_result['rows'][0]['elements'][0]['duration']
+                ['value'])
+        second = float(gmaps.distance_matrix(destination[0], destination[1],mode='driving')
+        ['rows'][0]['elements'][0]['duration']['value'])
+        return  first + second
+                
     return float(directions_result['rows'][0]['elements'][0]['duration'][
                     'value'])
 
@@ -261,6 +264,17 @@ class DriverViewSet(viewsets.ModelViewSet):
         driver = get_list_or_404(DriverViewSet.queryset, id=driver_id)
         return Response(driver[0].getter())
 
+    @detail_route(methods=['post'], url_path='history')
+    @token_required
+
+    def order_history(self, request, pk='r'):
+        div_id = Token.objects.get(keys=request.data['key']).user_id
+        orders = get_list_or_404(Order.objects, driver_id=div_id, status='S4')
+        order_List = []
+        for order in orders:
+            order_List.append(order.getter())
+        return Response(order_List, status=200)
+
     # Get first order
     @detail_route(methods=['post'], url_path='order')
     @token_required
@@ -276,17 +290,6 @@ class DriverViewSet(viewsets.ModelViewSet):
             this_order['rest'] = rest.restaurant_name
             order_List.append(this_order)
         return Response(order_List, status=200)
-
-    @detail_route(methods=['post'], url_path='history')
-    @token_required
-    def order(self, request, pk='r'):
-        div_id = Token.objects.get(keys=request.data['key']).user_id
-        orders = get_list_or_404(Order.objects, driver_id=div_id, status='S4')
-        order_List = []
-        for order in orders:
-            order_List.append(order.getter())
-        return Response(order_List, status=200)
-
 
     # Order id needed
     # accept the first order or the second
